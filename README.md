@@ -1,4 +1,6 @@
-# Makefile Project Template
+# CS452 Eric Johnson Project 3: Implement Buddy Algorithm
+This program implements the Buddy System approach to dynamic storage allocation. 
+
 
 Steps to configure, build, run, and test the project.
 
