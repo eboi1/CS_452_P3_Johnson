@@ -16,6 +16,7 @@
 
 #include "lab.h"
 
+
 #define handle_error_and_die(msg) \
     do                            \
     {                             \
@@ -31,7 +32,15 @@
  */
 size_t btok(size_t bytes)
 {
-    //DO NOT use math.pow
+    size_t k = 0;
+    size_t power = UINT64_C(1);
+
+    while (power <= bytes) {
+        power <<= 1; // shift left by 1
+        k++;
+    }
+
+    return k;
 }
 
 struct avail *buddy_calc(struct buddy_pool *pool, struct avail *buddy)
