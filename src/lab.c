@@ -32,42 +32,155 @@
  */
 size_t btok(size_t bytes)
 {
+    if (bytes == 0) return 0;
     size_t k = 0;
     size_t power = UINT64_C(1);
 
-    while (power <= bytes) {
+    while (power < bytes) {
         power <<= 1; // shift left by 1
         k++;
     }
-
     return k;
 }
 
 struct avail *buddy_calc(struct buddy_pool *pool, struct avail *buddy)
 {
-
+    // Calculate the offset of the current block from the base
+    size_t baseOffset = (char *)buddy - (char *)pool->base;
+    
+    // Calculate the size of the current block (2^kval bytes)
+    size_t blockSize = UINT64_C(1) << buddy->kval;
+    
+    // XOR the offset with the block size to get the buddy's offset
+    size_t buddyOffset = baseOffset ^ blockSize;
+    
+    // Calculate the buddy's address by adding the offset to the base
+    struct avail *buddyPtr = (struct avail *)((char *)pool->base + buddyOffset);
+    
+    return buddyPtr;
 }
 
 void *buddy_malloc(struct buddy_pool *pool, size_t size)
 {
+    if (size == 0 || pool == NULL)
+    {
+        return NULL;
+    }
 
-    //get the kval for the requested size with enough room for the tag and kval fields
+    //////get the kval for the requested size with enough room for the tag and kval fields
+    // Calculate the required size including the header
+    size_t totalSize = size + sizeof(struct avail);
 
-    //R1 Find a block
+    // Get the smallest kval that fits the total size
+    size_t kval = btok(totalSize);
 
-    //There was not enough memory to satisfy the request thus we need to set error and return NULL
+    printf("size=%zu, total_size=%zu, kval=%zu, SMALLEST_K=%d, pool->kval_m=%zu\n", 
+        size, totalSize, kval, SMALLEST_K, pool->kval_m);
 
-    //R2 Remove from list;
+    printf("size=%zu, total_size=%zu, kval=%zu, SMALLEST_K=%d, pool->kval_m=%zu\n", 
+        size, totalSize, kval, SMALLEST_K, pool->kval_m);
 
-    //R3 Split required?
+    if (kval < SMALLEST_K) {
+        kval = SMALLEST_K; // Enforce minimum block size
+    }
+    if (kval > pool->kval_m) return NULL; // Request exceeds pool size    
 
-    //R4 Split the block
 
+    /////R1 Find a block
+    // Find the smallest available block that’s large enough
+    size_t currentK = kval;
+    struct avail *block = NULL;
+    while (currentK <= pool->kval_m) {
+        if (pool->avail[currentK].next != &pool->avail[currentK]) {
+            // Found a block in the list
+            block = pool->avail[currentK].next;
+            printf("Found block at k=%zu, block->kval=%zu\n", currentK, (size_t)block->kval);
+            // printf("Found block at k=%zu, block->kval=%zu\n", currentK, block->kval);
+            break;
+        }
+        currentK++;
+    }
+
+
+
+    ////There was not enough memory to satisfy the request thus we need to set error and return NULL
+    // No block found
+    if (block == NULL) return NULL;    
+
+    ////R2 Remove from list;
+    // Remove the block from its current list
+    block->prev->next = block->next;
+    block->next->prev = block->prev;
+
+    ////R3 Split required?
+    // Split the block if it’s too large
+    while (block->kval > kval) {
+        printf("Splitting: block->kval=%zu to %zu\n", (size_t)block->kval, (size_t)(block->kval - 1));
+        //printf("Splitting: block->kval=%zu to %zu\n", block->kval, block->kval - 1);
+        ////R4 Split the block
+        // Reduce the block’s size by 1 (halving it)
+        block->kval--;
+        size_t newSize = UINT64_C(1) << block->kval;
+
+        // Create a new buddy block
+        struct avail *buddy = (struct avail *)((char *)block + newSize);
+        buddy->tag = BLOCK_AVAIL;
+        buddy->kval = block->kval;
+
+        // Add the buddy to the appropriate availability list
+        struct avail *list_head = &pool->avail[buddy->kval];
+        buddy->next = list_head->next;
+        buddy->prev = list_head;
+        list_head->next->prev = buddy;
+        list_head->next = buddy;
+    }
+
+    // Mark the block as reserved
+    block->tag = BLOCK_RESERVED;
+
+    printf("Returning block with kval=%zu\n", (size_t)block->kval);
+    // printf("Returning block with kval=%zu\n", block->kval);
+
+    // Return pointer to user memory (after the header)
+    return (void *)((char *)block + sizeof(struct avail));
 }
 
 void buddy_free(struct buddy_pool *pool, void *ptr)
 {
+    if (ptr == NULL) return;
 
+    struct avail *block = (struct avail *)((char *)ptr - sizeof(struct avail));
+    if (block->tag != BLOCK_RESERVED) return;
+
+    block->tag = BLOCK_AVAIL;
+    size_t current_k = block->kval;
+
+    while (current_k < pool->kval_m) {
+        struct avail *buddy = buddy_calc(pool, block);
+        
+        // Check if buddy is valid and available
+        if ((char *)buddy >= (char *)pool->base + pool->numbytes ||
+            buddy->tag != BLOCK_AVAIL || 
+            buddy->kval != current_k) {
+            break;
+        }
+
+        // Remove buddy from its list
+        buddy->prev->next = buddy->next;
+        buddy->next->prev = buddy->prev;
+
+        // Use the lower address as the new block
+        block = (block < buddy) ? block : buddy;
+        current_k++;
+        block->kval = current_k;
+    }
+
+    // Add the block to its availability list
+    struct avail *list_head = &pool->avail[current_k];
+    block->next = list_head->next;
+    block->prev = list_head;
+    list_head->next->prev = block;
+    list_head->next = block;
 }
 
 /**
@@ -82,6 +195,8 @@ void *buddy_realloc(struct buddy_pool *pool, void *ptr, size_t size)
 {
     //Required for Grad Students
     //Optional for Undergrad Students
+    printf("buddy_realloc not implemented\n");
+    return NULL;
 }
 
 void buddy_init(struct buddy_pool *pool, size_t size)

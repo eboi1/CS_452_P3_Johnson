@@ -133,6 +133,134 @@ void test_buddy_init(void)
     }
 }
 
+void test_btok(void) {
+  assert(btok(0) == 0);          // edge case
+  assert(btok(1) == 0);          // 2^0 = 1
+  assert(btok(1024) == 10);      // 2^10 = 1024
+  assert(btok(1000) == 10);      // rounds up to next power of 2
+  assert(btok(2048) == 11);
+  assert(btok(4096) == 12);
+}
+
+
+
+void test_malloc_null_and_zero(void) {
+  assert(buddy_malloc(NULL, 64) == NULL);
+
+  struct buddy_pool pool;
+  buddy_init(&pool, 1024);
+
+  assert(buddy_malloc(&pool, 0) == NULL); // can't malloc 0 bytes
+
+  buddy_destroy(&pool);
+}
+
+void test_simple_malloc_and_free(void) {
+  struct buddy_pool pool;
+  buddy_init(&pool, 1024);
+
+  void* ptr = buddy_malloc(&pool, 64);
+  assert(ptr != NULL);
+
+  buddy_free(&pool, ptr);
+
+  buddy_destroy(&pool);
+}
+
+
+
+void test_double_free_and_invalid_free(void) {
+  struct buddy_pool pool;
+  buddy_init(&pool, 1024);
+
+  // Free NULL (should be no-op)
+  buddy_free(&pool, NULL);
+
+  void* p = buddy_malloc(&pool, 64);
+  assert(p != NULL);
+
+  buddy_free(&pool, p);
+
+  // Try double-free
+  buddy_free(&pool, p); // this should be ignored silently
+
+  buddy_destroy(&pool);
+}
+
+void test_coalescing_on_free(void) {
+  struct buddy_pool pool;
+  buddy_init(&pool, 1024);
+
+  void* a = buddy_malloc(&pool, 64);
+  void* b = buddy_malloc(&pool, 64);
+
+  assert(a != NULL && b != NULL);
+
+  // Free in reverse order to test merging logic
+  buddy_free(&pool, b);
+  buddy_free(&pool, a);
+
+  buddy_destroy(&pool);
+}
+
+void test_buddy_calc(void)
+{
+    fprintf(stderr, "->Testing buddy_calc\n");
+    struct buddy_pool pool;
+    buddy_init(&pool, UINT64_C(1) << MIN_K); // 1 MiB pool
+
+    // Allocate a small block to split the pool
+    void *mem = buddy_malloc(&pool, 1);
+    struct avail *block = (struct avail *)((char *)mem - sizeof(struct avail));
+    struct avail *buddy = buddy_calc(&pool, block);
+
+    // Check buddy properties (kval=6, offset by 2^6 = 64 bytes)
+    assert(buddy->kval == block->kval);
+    assert((char *)buddy == (char *)block + (UINT64_C(1) << block->kval));
+    assert(buddy->tag == BLOCK_AVAIL); // Should be the split buddy
+
+    buddy_free(&pool, mem);
+    buddy_destroy(&pool);
+}
+
+void test_buddy_free_null(void)
+{
+    fprintf(stderr, "->Testing buddy_free with NULL\n");
+    struct buddy_pool pool;
+    buddy_init(&pool, UINT64_C(1) << MIN_K);
+    buddy_free(&pool, NULL); // Should do nothing
+    check_buddy_pool_full(&pool); // Pool unchanged
+    buddy_destroy(&pool);
+}
+
+void test_buddy_free_invalid(void)
+{
+    fprintf(stderr, "->Testing buddy_free with invalid block\n");
+    struct buddy_pool pool;
+    buddy_init(&pool, UINT64_C(1) << MIN_K);
+    void *mem = buddy_malloc(&pool, 1);
+    struct avail *block = (struct avail *)((char *)mem - sizeof(struct avail));
+    block->tag = BLOCK_AVAIL; // Simulate invalid state
+    buddy_free(&pool, mem); // Should return without action
+    block->tag = BLOCK_RESERVED; // Restore for proper free
+    buddy_free(&pool, mem);
+    check_buddy_pool_full(&pool);
+    buddy_destroy(&pool);
+}
+
+void test_buddy_malloc_smallest_k(void)
+{
+    fprintf(stderr, "->Testing buddy_malloc splitting to SMALLEST_K\n");
+    struct buddy_pool pool;
+    buddy_init(&pool, UINT64_C(1) << MIN_K);
+    void *mem = buddy_malloc(&pool, 1);
+    struct avail *block = (struct avail *)((char *)mem - sizeof(struct avail));
+    assert(block->kval == SMALLEST_K); // Should split to 2^6
+    buddy_free(&pool, mem);
+    check_buddy_pool_full(&pool);
+    buddy_destroy(&pool);
+}
+
 
 int main(void) {
   time_t t;
@@ -145,5 +273,17 @@ int main(void) {
   RUN_TEST(test_buddy_init);
   RUN_TEST(test_buddy_malloc_one_byte);
   RUN_TEST(test_buddy_malloc_one_large);
+
+
+  //Additional tests
+  RUN_TEST(test_btok);
+  RUN_TEST(test_malloc_null_and_zero);
+  RUN_TEST(test_simple_malloc_and_free);
+  RUN_TEST(test_coalescing_on_free);
+  RUN_TEST(test_double_free_and_invalid_free);
+  RUN_TEST(test_buddy_calc);
+  RUN_TEST(test_buddy_free_null);
+  RUN_TEST(test_buddy_free_invalid);
+  RUN_TEST(test_buddy_malloc_smallest_k);
 return UNITY_END();
 }
