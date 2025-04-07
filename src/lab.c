@@ -44,6 +44,14 @@ size_t btok(size_t bytes)
     return k;
 }
 
+
+/**
+ * @brief Calculate the buddy of a given block.
+ *
+ * @param pool The memory pool
+ * @param buddy The block to find the buddy for
+ * @return struct avail* Pointer to the buddy block
+ */
 struct avail *buddy_calc(struct buddy_pool *pool, struct avail *buddy)
 {
     // Calculate the offset of the current block from the base
@@ -61,6 +69,13 @@ struct avail *buddy_calc(struct buddy_pool *pool, struct avail *buddy)
     return buddyPtr;
 }
 
+/**
+ * @brief Allocate a block of memory from the buddy pool.
+ *
+ * @param pool The memory pool to allocate from
+ * @param size The size of the user requested memory block in bytes
+ * @return void* Pointer to the allocated memory block
+ */
 void *buddy_malloc(struct buddy_pool *pool, size_t size)
 {
     if (size == 0 || pool == NULL)
@@ -110,7 +125,7 @@ void *buddy_malloc(struct buddy_pool *pool, size_t size)
     ////There was not enough memory to satisfy the request thus we need to set error and return NULL
     // No block found
     if (block == NULL) {
-        errno = ENOMEM; // No available block
+        errno = ENOMEM; 
         return NULL;    
     }
 
@@ -146,12 +161,15 @@ void *buddy_malloc(struct buddy_pool *pool, size_t size)
     block->tag = BLOCK_RESERVED;
 
     printf("Returning block with kval=%zu\n", (size_t)block->kval);
-    // printf("Returning block with kval=%zu\n", block->kval);
-
-    // Return pointer to user memory (after the header)
     return (void *)((char *)block + sizeof(struct avail));
 }
 
+/**
+ * @brief Free a block of memory back to the buddy pool.
+ *
+ * @param pool The memory pool
+ * @param ptr  Pointer to the memory block to free
+ */
 void buddy_free(struct buddy_pool *pool, void *ptr)
 {
     if (ptr == NULL) return;
@@ -206,6 +224,12 @@ void *buddy_realloc(struct buddy_pool *pool, void *ptr, size_t size)
     return NULL;
 }
 
+/**
+ * @brief Initialize the buddy pool with a given size.
+ *
+ * @param pool The buddy pool to initialize
+ * @param size The size of the pool in bytes
+ */
 void buddy_init(struct buddy_pool *pool, size_t size)
 {
     size_t kval = 0;
@@ -255,6 +279,11 @@ void buddy_init(struct buddy_pool *pool, size_t size)
     m->next = m->prev = &pool->avail[kval];
 }
 
+/**
+ * @brief Destroy the buddy pool and free the memory.
+ *
+ * @param pool The buddy pool to destroy
+ */
 void buddy_destroy(struct buddy_pool *pool)
 {
     int rval = munmap(pool->base, pool->numbytes);
