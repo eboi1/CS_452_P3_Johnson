@@ -83,7 +83,10 @@ void *buddy_malloc(struct buddy_pool *pool, size_t size)
     if (kval < SMALLEST_K) {
         kval = SMALLEST_K; // Enforce minimum block size
     }
-    if (kval > pool->kval_m) return NULL; // Request exceeds pool size    
+    if (kval > pool->kval_m) {
+        errno = ENOMEM; // Request exceeds pool size
+        return NULL; // Request exceeds pool size    
+    }
 
 
     /////R1 Find a block
@@ -105,7 +108,10 @@ void *buddy_malloc(struct buddy_pool *pool, size_t size)
 
     ////There was not enough memory to satisfy the request thus we need to set error and return NULL
     // No block found
-    if (block == NULL) return NULL;    
+    if (block == NULL) {
+        errno = ENOMEM; // No available block
+        return NULL;    
+    }
 
     ////R2 Remove from list;
     // Remove the block from its current list

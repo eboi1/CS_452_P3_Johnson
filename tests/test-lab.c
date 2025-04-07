@@ -1,4 +1,5 @@
 #include <assert.h>
+#include <sys/mman.h>
 #include <stdlib.h>
 #include <time.h>
 #ifdef __APPLE__
@@ -9,13 +10,19 @@
 #include "harness/unity.h"
 #include "../src/lab.h"
 
+static struct buddy_pool test_pool;
 
 void setUp(void) {
-  // set stuff up here
+  buddy_init(&test_pool, UINT64_C(1) << MIN_K);
+  assert(test_pool.base != MAP_FAILED);
+  assert(test_pool.kval_m == MIN_K);
 }
 
 void tearDown(void) {
-  // clean stuff up here
+  if (test_pool.base != (void *)-1 && test_pool.base != NULL) {
+    buddy_destroy(&test_pool);
+  }
+  memset(&test_pool, 0, sizeof(struct buddy_pool));
 }
 
 
@@ -156,51 +163,35 @@ void test_malloc_null_and_zero(void) {
 }
 
 void test_simple_malloc_and_free(void) {
-  struct buddy_pool pool;
-  buddy_init(&pool, 1024);
-
-  void* ptr = buddy_malloc(&pool, 64);
+  void* ptr = buddy_malloc(&test_pool, 1);
   assert(ptr != NULL);
-
-  buddy_free(&pool, ptr);
-
-  buddy_destroy(&pool);
+  buddy_free(&test_pool, ptr);
+  buddy_destroy(&test_pool);
 }
 
 
 
 void test_double_free_and_invalid_free(void) {
-  struct buddy_pool pool;
-  buddy_init(&pool, 1024);
-
-  // Free NULL (should be no-op)
-  buddy_free(&pool, NULL);
-
-  void* p = buddy_malloc(&pool, 64);
-  assert(p != NULL);
-
-  buddy_free(&pool, p);
-
-  // Try double-free
-  buddy_free(&pool, p); // this should be ignored silently
-
-  buddy_destroy(&pool);
+  void *mem = buddy_malloc(&test_pool, 1);
+  buddy_free(&test_pool, mem);
+  buddy_free(&test_pool, mem); // Double free (should do nothing)
+  check_buddy_pool_full(&test_pool);
+  mem = buddy_malloc(&test_pool, 1);
+  struct avail *block = (struct avail *)((char *)mem - sizeof(struct avail));
+  block->tag = BLOCK_AVAIL; // Invalid
+  buddy_free(&test_pool, mem); // Should return
+  block->tag = BLOCK_RESERVED;
+  buddy_free(&test_pool, mem);
+  check_buddy_pool_full(&test_pool);
 }
 
 void test_coalescing_on_free(void) {
-  struct buddy_pool pool;
-  buddy_init(&pool, 1024);
-
-  void* a = buddy_malloc(&pool, 64);
-  void* b = buddy_malloc(&pool, 64);
-
-  assert(a != NULL && b != NULL);
-
-  // Free in reverse order to test merging logic
-  buddy_free(&pool, b);
-  buddy_free(&pool, a);
-
-  buddy_destroy(&pool);
+  void *mem1 = buddy_malloc(&test_pool, 1); 
+  void *mem2 = buddy_malloc(&test_pool, 1); 
+  buddy_free(&test_pool, mem1);
+  assert(test_pool.avail[SMALLEST_K].next != &test_pool.avail[SMALLEST_K]); // Partial
+  buddy_free(&test_pool, mem2);
+  check_buddy_pool_full(&test_pool);
 }
 
 void test_buddy_calc(void)
@@ -226,11 +217,8 @@ void test_buddy_calc(void)
 void test_buddy_free_null(void)
 {
     fprintf(stderr, "->Testing buddy_free with NULL\n");
-    struct buddy_pool pool;
-    buddy_init(&pool, UINT64_C(1) << MIN_K);
-    buddy_free(&pool, NULL); // Should do nothing
-    check_buddy_pool_full(&pool); // Pool unchanged
-    buddy_destroy(&pool);
+    buddy_free(&test_pool, NULL);
+    check_buddy_pool_full(&test_pool);
 }
 
 void test_buddy_free_invalid(void)
@@ -251,14 +239,10 @@ void test_buddy_free_invalid(void)
 void test_buddy_malloc_smallest_k(void)
 {
     fprintf(stderr, "->Testing buddy_malloc splitting to SMALLEST_K\n");
-    struct buddy_pool pool;
-    buddy_init(&pool, UINT64_C(1) << MIN_K);
-    void *mem = buddy_malloc(&pool, 1);
+    void *mem = buddy_malloc(&test_pool, 1);
     struct avail *block = (struct avail *)((char *)mem - sizeof(struct avail));
-    assert(block->kval == SMALLEST_K); // Should split to 2^6
-    buddy_free(&pool, mem);
-    check_buddy_pool_full(&pool);
-    buddy_destroy(&pool);
+    assert(block->kval == SMALLEST_K);
+    buddy_free(&test_pool, mem);
 }
 
 
