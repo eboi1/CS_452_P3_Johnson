@@ -1,3 +1,11 @@
+/**
+ * @file lab.c
+ * @brief   This file contains the implementation of the buddy memory allocation system.
+ *          It includes functions for initializing the buddy pool, allocating and freeing memory,
+ *          and calculating the buddy of a given block.
+ * @author Eric Johnson
+ * @date 2025-4-07
+ */
 #define _GNU_SOURCE
 #include <stdio.h>
 #include <stdbool.h>
@@ -14,9 +22,7 @@
 #else
 #include <errno.h>
 #endif
-
 #include "lab.h"
-
 
 #define handle_error_and_die(msg) \
     do                            \

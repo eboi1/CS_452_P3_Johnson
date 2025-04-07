@@ -140,6 +140,9 @@ void test_buddy_init(void)
     }
 }
 
+/**
+ * Test the btok function to ensure it returns the correct power of 2.
+ */
 void test_btok(void) {
   assert(btok(0) == 0);          // edge case
   assert(btok(1) == 0);          // 2^0 = 1
@@ -150,7 +153,9 @@ void test_btok(void) {
 }
 
 
-
+/**
+ * Test malloc with NULL and zero size.
+ */
 void test_malloc_null_and_zero(void) {
   assert(buddy_malloc(NULL, 64) == NULL);
 
@@ -162,6 +167,9 @@ void test_malloc_null_and_zero(void) {
   buddy_destroy(&pool);
 }
 
+/**
+ * Test simple malloc and free.
+ */
 void test_simple_malloc_and_free(void) {
   void* ptr = buddy_malloc(&test_pool, 1);
   assert(ptr != NULL);
@@ -169,8 +177,9 @@ void test_simple_malloc_and_free(void) {
   buddy_destroy(&test_pool);
 }
 
-
-
+/**
+ * Test double free and invalid free.
+ */
 void test_double_free_and_invalid_free(void) {
   void *mem = buddy_malloc(&test_pool, 1);
   buddy_free(&test_pool, mem);
@@ -185,6 +194,9 @@ void test_double_free_and_invalid_free(void) {
   check_buddy_pool_full(&test_pool);
 }
 
+/**
+ * Allocate two blocks, free them, and check if they are coalesced.
+ */
 void test_coalescing_on_free(void) {
   void *mem1 = buddy_malloc(&test_pool, 1); 
   void *mem2 = buddy_malloc(&test_pool, 1); 
@@ -194,6 +206,9 @@ void test_coalescing_on_free(void) {
   check_buddy_pool_full(&test_pool);
 }
 
+/**
+ * Test the buddy_calc function.
+ */
 void test_buddy_calc(void)
 {
     fprintf(stderr, "->Testing buddy_calc\n");
@@ -214,6 +229,9 @@ void test_buddy_calc(void)
     buddy_destroy(&pool);
 }
 
+/**
+ * Test buddy_free with NULL pointer.
+ */
 void test_buddy_free_null(void)
 {
     fprintf(stderr, "->Testing buddy_free with NULL\n");
@@ -221,6 +239,9 @@ void test_buddy_free_null(void)
     check_buddy_pool_full(&test_pool);
 }
 
+/**
+ * Test buddy_free with an invalid block (not reserved).
+ */
 void test_buddy_free_invalid(void)
 {
     fprintf(stderr, "->Testing buddy_free with invalid block\n");
@@ -236,6 +257,9 @@ void test_buddy_free_invalid(void)
     buddy_destroy(&pool);
 }
 
+/**
+ * Test the buddy_malloc function to ensure it splits the block down to the smallest size.
+ */
 void test_buddy_malloc_smallest_k(void)
 {
     fprintf(stderr, "->Testing buddy_malloc splitting to SMALLEST_K\n");
